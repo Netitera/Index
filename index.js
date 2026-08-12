@@ -1,136 +1,183 @@
-const http = require("http");
-const fs = require("fs");
-const path = require("path");
-
-const HOST = "0.0.0.0";
-const PORT = process.env.PORT || 3000;
-
-const APPROVED_FILE = path.join(__dirname, "indexes", "approved.txt");
-const INDEX_FILE = path.join(__dirname, "index.html");
-
 /**
- * Check whether a domain is valid.
+ * Netitera Index API
  *
- * Accepted examples:
- *   github.com
- *   www.github.com
- *   docs.github.com
+ * GitHub Pages compatible.
  *
- * Not accepted:
- *   github
- *   https://github.com/path
- *   javascript:...
- */
-function isValidDomain(domain) {
-    if (!domain || domain.length > 253) {
-        return false;
-    }
-
-    // Remove a trailing dot, which is valid DNS syntax.
-    domain = domain.replace(/\.$/, "");
-
-    // Domain must contain at least one dot.
-    if (!domain.includes(".")) {
-        return false;
-    }
-
-    // Reject anything containing spaces, slashes, protocols, etc.
-    if (!/^[a-zA-Z0-9.-]+$/.test(domain)) {
-        return false;
-    }
-
-    // Cannot begin or end with a hyphen.
-    if (domain.startsWith("-") || domain.endsWith("-")) {
-        return false;
-    }
-
-    const labels = domain.split(".");
-
-    for (const label of labels) {
-        if (
-            label.length === 0 ||
-            label.length > 63 ||
-            label.startsWith("-") ||
-            label.endsWith("-") ||
-            !/^[a-zA-Z0-9-]+$/.test(label)
-        ) {
-            return false;
-        }
-    }
-
-    // TLD must contain only letters.
-    const tld = labels[labels.length - 1];
-
-    if (!/^[a-zA-Z]{2,63}$/.test(tld)) {
-        return false;
-    }
-
-    return true;
-}
-
-/**
- * Normalize a line from approved.txt into a canonical URL.
+ * This file does NOT run a server.
+ * Instead, it provides a JavaScript API for reading
+ * the Netitera approved-site index.
  *
  * Example:
- *   github.com          -> https://github.com
- *   WWW.GITHUB.COM      -> https://www.github.com
- *   https://github.com  -> https://github.com
+ *
+ * import {
+ *     getSites,
+ *     isApproved,
+ *     getDomains
+ * } from "https://netitera.github.io/Index/index.js";
+ *
+ * const sites = await getSites();
+ *
+ * console.log(sites);
+ *
+ * console.log(await isApproved("github.com"));
  */
-function normalizeSite(line) {
+
+/*
+ * Resolve the index directory from this file itself.
+ *
+ * This is important because the project is hosted at:
+ *
+ * https://netitera.github.io/Index/
+ *
+ * Using import.meta.url means the API still works if
+ * the repository/project is moved elsewhere.
+ */
+const INDEX_ROOT = new URL("./", import.meta.url);
+
+/*
+ * Location of the approved-site source file.
+ */
+const APPROVED_URL = new URL(
+    "./indexes/approved.txt",
+    INDEX_ROOT
+);
+
+/*
+ * Normalize a domain into a canonical URL.
+ *
+ * Examples:
+ *
+ * github.com
+ * https://github.com
+ * https://www.github.com/
+ *
+ * become a normalized representation.
+ */
+function normalizeDomain(value) {
+    if (typeof value !== "string") {
+        return null;
+    }
+
+    let domain = value.trim();
+
+    if (!domain) {
+        return null;
+    }
+
+    /*
+     * Remove HTTP/HTTPS if supplied.
+     */
+    domain = domain.replace(
+        /^https?:\/\//i,
+        ""
+    );
+
+    /*
+     * Remove a trailing slash.
+     */
+    domain = domain.replace(/\/+$/, "");
+
+    /*
+     * Do not accept paths, queries, or fragments.
+     */
+    if (
+        domain.includes("/") ||
+        domain.includes("?") ||
+        domain.includes("#")
+    ) {
+        return null;
+    }
+
+    /*
+     * Lowercase domain names.
+     */
+    domain = domain.toLowerCase();
+
+    /*
+     * Basic hostname validation.
+     */
+    const hostnamePattern =
+        /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
+
+    if (!hostnamePattern.test(domain)) {
+        return null;
+    }
+
+    return domain;
+}
+
+/*
+ * Convert a raw approved.txt line into a normalized site.
+ */
+function parseLine(line) {
     let value = line.trim();
 
-    if (!value || value.startsWith("#")) {
+    /*
+     * Ignore empty lines.
+     */
+    if (!value) {
         return null;
     }
 
-    // Allow users to accidentally put http:// or https://.
-    value = value.replace(/^https?:\/\//i, "");
-
-    // Do not allow paths, query strings, fragments, ports, etc.
-    if (value.includes("/") || value.includes("?") || value.includes("#")) {
+    /*
+     * Ignore comments.
+     */
+    if (value.startsWith("#")) {
         return null;
     }
 
-    // Remove trailing dot.
-    value = value.replace(/\.$/, "");
+    const domain = normalizeDomain(value);
 
-    // Normalize capitalization.
-    value = value.toLowerCase();
-
-    if (!isValidDomain(value)) {
+    if (!domain) {
         return null;
     }
 
-    return `https://${value}`;
+    return {
+        domain,
+        url: `https://${domain}`
+    };
 }
 
 /**
- * Read and validate approved sites.
+ * Fetch and parse the approved index.
+ *
+ * @returns {Promise<Array<{domain: string, url: string}>>}
  */
-function getApprovedSites() {
-    if (!fs.existsSync(APPROVED_FILE)) {
-        return [];
+export async function getSites() {
+    const response = await fetch(
+        APPROVED_URL,
+        {
+            method: "GET",
+            cache: "no-cache"
+        }
+    );
+
+    if (!response.ok) {
+        throw new Error(
+            `Failed to fetch approved index: HTTP ${response.status}`
+        );
     }
 
-    const lines = fs
-        .readFileSync(APPROVED_FILE, "utf8")
-        .split(/\r?\n/);
+    const text = await response.text();
 
     const sites = [];
     const seen = new Set();
 
-    for (const line of lines) {
-        const site = normalizeSite(line);
+    for (const line of text.split(/\r?\n/)) {
+        const site = parseLine(line);
 
         if (!site) {
             continue;
         }
 
-        if (seen.has(site)) {
+        /*
+         * Prevent duplicate domains.
+         */
+        if (seen.has(site.domain)) {
             continue;
         }
 
-        seen.add(site);
+        seen.add(site.domain);
         sites.push(site);
     }
 
@@ -138,134 +185,71 @@ function getApprovedSites() {
 }
 
 /**
- * Send JSON.
+ * Get only the domains.
+ *
+ * @returns {Promise<string[]>}
  */
-function sendJSON(res, statusCode, data) {
-    const body = JSON.stringify(data, null, 2);
+export async function getDomains() {
+    const sites = await getSites();
 
-    res.writeHead(statusCode, {
-        "Content-Type": "application/json; charset=utf-8",
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-        "Content-Length": Buffer.byteLength(body)
-    });
-
-    res.end(body);
+    return sites.map(site => site.domain);
 }
 
 /**
- * Send plain text.
+ * Get only the URLs.
+ *
+ * @returns {Promise<string[]>}
  */
-function sendText(res, statusCode, text) {
-    res.writeHead(statusCode, {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Access-Control-Allow-Origin": "*",
-        "Content-Length": Buffer.byteLength(text)
-    });
+export async function getURLs() {
+    const sites = await getSites();
 
-    res.end(text);
+    return sites.map(site => site.url);
 }
 
 /**
- * Send HTML.
+ * Check whether a domain is approved.
+ *
+ * @param {string} domain
+ * @returns {Promise<boolean>}
  */
-function sendHTML(res, statusCode, html) {
-    res.writeHead(statusCode, {
-        "Content-Type": "text/html; charset=utf-8",
-        "Access-Control-Allow-Origin": "*",
-        "Content-Length": Buffer.byteLength(html)
-    });
+export async function isApproved(domain) {
+    const normalized = normalizeDomain(domain);
 
-    res.end(html);
+    if (!normalized) {
+        return false;
+    }
+
+    const domains = await getDomains();
+
+    return domains.includes(normalized);
 }
 
-const server = http.createServer((req, res) => {
-    // CORS preflight.
-    if (req.method === "OPTIONS") {
-        res.writeHead(204, {
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "GET, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type"
-        });
+/**
+ * Get the raw location of the Netitera approved index.
+ *
+ * @returns {string}
+ */
+export function getIndexURL() {
+    return APPROVED_URL.href;
+}
 
-        res.end();
-        return;
-    }
-
-    // This index is read-only.
-    if (req.method !== "GET") {
-        sendJSON(res, 405, {
-            error: "Method Not Allowed"
-        });
-
-        return;
-    }
-
-    const url = new URL(
-        req.url,
-        `http://${req.headers.host || "localhost"}`
-    );
-
-    if (url.pathname === "/api/sites") {
-        const sites = getApprovedSites();
-
-        sendJSON(res, 200, {
-            sites,
-            count: sites.length
-        });
-
-        return;
-    }
-
-    /**
-     * GET /api/sites.txt
-     *
-     * Returns one normalized URL per line.
-     */
-    if (url.pathname === "/api/sites.txt") {
-        const sites = getApprovedSites();
-
-        sendText(res, 200, sites.join("\n"));
-        return;
-    }
-
-    /**
-     * GET /api/health
-     */
-    if (url.pathname === "/api/health") {
-        const sites = getApprovedSites();
-
-        sendJSON(res, 200, {
-            status: "ok",
-            sites: sites.length
-        });
-
-        return;
-    }
-
-    /**
-     * GET /
-     * GET /index.html
-     */
-    if (url.pathname === "/" || url.pathname === "/index.html") {
-        if (!fs.existsSync(INDEX_FILE)) {
-            sendText(res, 500, "index.html not found");
-            return;
-        }
-
-        const html = fs.readFileSync(INDEX_FILE, "utf8");
-
-        sendHTML(res, 200, html);
-        return;
-    }
-
-    // Unknown endpoint.
-    sendJSON(res, 404, {
-        error: "Not Found"
-    });
-});
-
-server.listen(PORT, HOST, () => {
-    console.log(`Netitera Index running at http://${HOST}:${PORT}`);
-});
+/*
+ * Also expose the API globally for non-module users.
+ *
+ * This allows another site to do:
+ *
+ * <script src="https://netitera.github.io/Index/index.js"></script>
+ *
+ * and then:
+ *
+ * NetiteraIndex.getSites()
+ *
+ * Modern projects should prefer ES modules.
+ */
+globalThis.NetiteraIndex = {
+    getSites,
+    getDomains,
+    getURLs,
+    isApproved,
+    getIndexURL
+};
