@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Netitera Index</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.5;
+    }
+    h1 { margin-bottom: 0.25rem; }
+    #status { opacity: 0.7; margin-top: 0; }
+    ul { padding-left: 1.5rem; }
+    li { margin: 0.5rem 0; }
+    a { overflow-wrap: anywhere; }
+    .empty { opacity: 0.7; }
+  </style>
+</head>
+<body>
+  <h1>Netitera Index</h1>
+  <p id="status">Loading approved sites…</p>
+  <ul id="sites"></ul>
+
+  <script>
+    async function loadIndex() {
+      const status = document.getElementById('status');
+      const list = document.getElementById('sites');
+
+      try {
+        const response = await fetch('/api/sites', { cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = await response.json();
+        list.replaceChildren();
+
+        if (data.sites.length === 0) {
+          const empty = document.createElement('li');
+          empty.className = 'empty';
+          empty.textContent = 'No approved sites yet.';
+          list.appendChild(empty);
+        } else {
+          for (const site of data.sites) {
+            const item = document.createElement('li');
+            const link = document.createElement('a');
+            link.href = site;
+            link.textContent = site;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            item.appendChild(link);
+            list.appendChild(item);
+          }
+        }
+
+        status.textContent = `${data.count} approved site${data.count === 1 ? '' : 's'}`;
+      } catch (error) {
+        console.error(error);
+        status.textContent = 'Unable to load the approved-site index.';
+      }
+    }
+
+    loadIndex();
+  </script>
+</body>
+</html>
