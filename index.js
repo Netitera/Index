@@ -4,15 +4,29 @@
     /*
      * Netitera Index API
      *
-     * This file is served from:
-     * https://netitera.github.io/Index/index.js
+     * Repository:
+     * https://netitera.github.io/Index/
      *
-     * It can be consumed by other GitHub Pages sites.
+     * Approved domains:
+     * ./indexes/approved.txt
+     *
+     * Crawl data:
+     * ./crawled/<domain>.json
      */
 
-    const APPROVED_FILE =
-        "https://netitera.github.io/Index/indexes/approved.txt";
+    const INDEX_ROOT =
+        "https://netitera.github.io/Index/";
 
+    const APPROVED_FILE =
+        INDEX_ROOT + "indexes/approved.txt";
+
+    const CRAWLED_ROOT =
+        INDEX_ROOT + "crawled/";
+
+
+    /*
+     * Normalize a domain.
+     */
     function normalizeDomain(value) {
         if (typeof value !== "string") {
             return null;
@@ -24,16 +38,18 @@
             return null;
         }
 
-        domain = domain.replace(/^https?:\/\//i, "");
-        domain = domain.replace(/\/+$/, "");
-        domain = domain.toLowerCase();
+        domain = domain.replace(
+            /^https?:\/\//i,
+            ""
+        );
 
-        if (
-            domain.includes("/") ||
-            domain.includes("?") ||
-            domain.includes("#") ||
-            domain.includes(":")
-        ) {
+        domain = domain
+            .split("/")[0]
+            .split("?")[0]
+            .split("#")[0]
+            .toLowerCase();
+
+        if (!domain) {
             return null;
         }
 
@@ -47,7 +63,11 @@
         return domain;
     }
 
-    async function getSites() {
+
+    /*
+     * Get the approved domains.
+     */
+    async function getDomains() {
         const response = await fetch(
             APPROVED_FILE,
             {
@@ -58,66 +78,204 @@
 
         if (!response.ok) {
             throw new Error(
-                "Failed to load approved index: HTTP " +
+                "Failed to load approved.txt: HTTP " +
                 response.status
             );
         }
 
         const text = await response.text();
 
-        const sites = [];
+        const domains = [];
         const seen = new Set();
 
         for (const line of text.split(/\r?\n/)) {
-            const domain = normalizeDomain(line);
+            const domain =
+                normalizeDomain(line);
 
-            if (!domain || seen.has(domain)) {
+            if (!domain) {
+                continue;
+            }
+
+            if (seen.has(domain)) {
                 continue;
             }
 
             seen.add(domain);
-
-            sites.push({
-                domain: domain,
-                url: "https://" + domain
-            });
+            domains.push(domain);
         }
 
-        return sites;
+        return domains;
     }
 
-    async function getDomains() {
-        const sites = await getSites();
 
-        return sites.map(function (site) {
-            return site.domain;
+    /*
+     * Return approved sites with their URLs.
+     */
+    async function getSites() {
+        const domains =
+            await getDomains();
+
+        return domains.map(function (domain) {
+            return {
+                domain: domain,
+                url: "https://" + domain
+            };
         });
     }
 
-    async function getURLs() {
-        const sites = await getSites();
 
-        return sites.map(function (site) {
-            return site.url;
-        });
+    /*
+     * Get one domain's crawl JSON.
+     *
+     * Example:
+     *
+     * getCrawl("github.com")
+     *
+     * loads:
+     *
+     * /crawled/github.com.json
+     */
+    async function getCrawl(domain) {
+        const normalized =
+            normalizeDomain(domain);
+
+        if (!normalized) {
+            throw new Error(
+                "Invalid domain: " + domain
+            );
+        }
+
+        const response = await fetch(
+            CRAWLED_ROOT +
+            encodeURIComponent(normalized) +
+            ".json",
+            {
+                method: "GET",
+                cache: "no-cache"
+            }
+        );
+
+        if (response.status === 404) {
+            return null;
+        }
+
+        if (!response.ok) {
+            throw new Error(
+                "Failed to load crawl data for " +
+                normalized +
+                ": HTTP " +
+                response.status
+            );
+        }
+
+        const data =
+            await response.json();
+
+        return data;
     }
 
+
+    /*
+     * Load all crawl files belonging to approved sites.
+     *
+     * Domains without a crawl file are returned with
+     * crawl: null rather than causing the entire request
+     * to fail.
+     */
+    async function getAllCrawls() {
+        const domains =
+            await getDomains();
+
+        const results =
+            await Promise.all(
+                domains.map(
+                    async function (domain) {
+                        try {
+                            return {
+                                domain: domain,
+                                crawl:
+                                    await getCrawl(domain)
+                            };
+                        } catch (error) {
+                            console.error(
+                                "Failed to load crawl:",
+                                domain,
+                                error
+                            );
+
+                            return {
+                                domain: domain,
+                                crawl: null,
+                                error: error.message
+                            };
+                        }
+                    }
+                )
+            );
+
+        return results;
+    }
+
+
+    /*
+     * Check whether a domain is approved.
+     */
     async function isApproved(domain) {
-        const normalized = normalizeDomain(domain);
+        const normalized =
+            normalizeDomain(domain);
 
         if (!normalized) {
             return false;
         }
 
-        const domains = await getDomains();
+        const domains =
+            await getDomains();
 
-        return domains.includes(normalized);
+        return domains.includes(
+            normalized
+        );
     }
 
+
+    /*
+     * Check whether a specific URL belongs to an
+     * approved domain.
+     */
+    async function isURLApproved(url) {
+        let hostname;
+
+        try {
+            hostname =
+                new URL(url).hostname.toLowerCase();
+        } catch {
+            return false;
+        }
+
+        const domains =
+            await getDomains();
+
+        return domains.some(
+            function (domain) {
+                return (
+                    hostname === domain ||
+                    hostname.endsWith(
+                        "." + domain
+                    )
+                );
+            }
+        );
+    }
+
+
+    /*
+     * Expose public API.
+     */
     window.NetiteraIndex = {
-        getSites: getSites,
-        getDomains: getDomains,
-        getURLs: getURLs,
-        isApproved: isApproved
+        getDomains,
+        getSites,
+        getCrawl,
+        getAllCrawls,
+        isApproved,
+        isURLApproved
     };
 })();

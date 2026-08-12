@@ -2,87 +2,789 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
     <title>Netitera Index</title>
 
     <style>
+        :root {
+            color-scheme: dark;
+
+            --background: #111111;
+            --surface: #191919;
+            --surface-hover: #202020;
+            --border: #303030;
+
+            --text: #eeeeee;
+            --muted: #999999;
+
+            --accent: #ff6b35;
+            --link: #72b7ff;
+
+            --success: #5fd17a;
+            --warning: #e8b45e;
+            --error: #ff6666;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
         body {
             margin: 0;
-            padding: 40px 20px;
-            background: #0d1117;
-            color: #e6edf3;
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+            min-height: 100vh;
+
+            background: var(--background);
+            color: var(--text);
+
+            font-family:
+                system-ui,
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                sans-serif;
+        }
+
+        header {
+            height: 64px;
+
+            display: flex;
+            align-items: center;
+
+            padding: 0 28px;
+
+            border-bottom: 1px solid var(--border);
+        }
+
+        .brand {
+            color: var(--accent);
+
+            font-size: 1.35rem;
+            font-weight: 800;
+
+            letter-spacing: -0.04em;
+
+            text-decoration: none;
         }
 
         main {
-            max-width: 900px;
+            width: min(950px, calc(100% - 32px));
+
             margin: 0 auto;
+
+            padding: 42px 0 80px;
         }
 
         h1 {
             margin: 0;
+
             font-size: 2rem;
+
+            letter-spacing: -0.04em;
         }
 
-        .description {
-            margin-top: 8px;
-            color: #8b949e;
+        .subtitle {
+            margin: 8px 0 34px;
+
+            color: var(--muted);
         }
 
-        #status {
-            margin-top: 30px;
-            color: #8b949e;
+        .status {
+            margin-bottom: 20px;
+
+            color: var(--muted);
+
+            font-size: 0.9rem;
         }
 
-        #sites {
-            list-style: none;
-            padding: 0;
-            margin-top: 15px;
+        .status.error {
+            color: var(--error);
         }
 
-        #sites li {
-            margin-bottom: 10px;
+        .site {
+            margin-bottom: 12px;
+
+            border: 1px solid var(--border);
+            border-radius: 10px;
+
+            overflow: hidden;
+
+            background: var(--surface);
         }
 
-        #sites a {
+        .site-summary {
+            width: 100%;
+
+            display: flex;
+            align-items: center;
+
+            gap: 12px;
+
+            padding: 17px 18px;
+
+            background: transparent;
+            color: var(--text);
+
+            border: 0;
+
+            cursor: pointer;
+
+            font: inherit;
+
+            text-align: left;
+        }
+
+        .site-summary:hover {
+            background: var(--surface-hover);
+        }
+
+        .arrow {
+            width: 18px;
+
+            color: var(--muted);
+
+            transition:
+                transform 0.15s ease;
+        }
+
+        .site.open .arrow {
+            transform: rotate(90deg);
+        }
+
+        .domain {
+            flex: 1;
+
+            font-weight: 600;
+        }
+
+        .site-status {
+            color: var(--muted);
+
+            font-size: 0.82rem;
+        }
+
+        .site-status.success {
+            color: var(--success);
+        }
+
+        .site-status.warning {
+            color: var(--warning);
+        }
+
+        .site-status.error {
+            color: var(--error);
+        }
+
+        .site-details {
+            display: none;
+
+            padding: 0 18px 20px 47px;
+
+            border-top: 1px solid var(--border);
+        }
+
+        .site.open .site-details {
             display: block;
-            padding: 12px 16px;
-            border: 1px solid #30363d;
-            border-radius: 8px;
-            color: #58a6ff;
+        }
+
+        .stats {
+            display: flex;
+            flex-wrap: wrap;
+
+            gap: 8px;
+
+            padding: 16px 0;
+        }
+
+        .stat {
+            padding: 7px 10px;
+
+            border: 1px solid var(--border);
+            border-radius: 6px;
+
+            color: var(--muted);
+
+            font-size: 0.78rem;
+        }
+
+        .pages {
+            display: flex;
+            flex-direction: column;
+
+            gap: 8px;
+        }
+
+        .page {
+            padding: 10px 12px;
+
+            border: 1px solid var(--border);
+            border-radius: 7px;
+
+            background: #141414;
+        }
+
+        .page-title {
+            color: var(--link);
+
             text-decoration: none;
+
+            font-size: 0.92rem;
         }
 
-        #sites a:hover {
-            background: #161b22;
+        .page-title:hover {
+            text-decoration: underline;
         }
 
-        .error {
-            color: #f85149;
+        .page-url {
+            margin-top: 4px;
+
+            overflow: hidden;
+
+            color: #777777;
+
+            font-size: 0.75rem;
+
+            text-overflow: ellipsis;
+
+            white-space: nowrap;
+        }
+
+        .page-description {
+            margin-top: 7px;
+
+            color: #999999;
+
+            font-size: 0.82rem;
+
+            line-height: 1.45;
         }
 
         .empty {
-            color: #8b949e;
+            padding: 20px 0;
+
+            color: var(--muted);
+        }
+
+        footer {
+            padding: 25px;
+
+            border-top: 1px solid var(--border);
+
+            color: #666666;
+
+            text-align: center;
+
+            font-size: 0.8rem;
+        }
+
+        @media (max-width: 650px) {
+            header {
+                padding: 0 16px;
+            }
+
+            main {
+                width: min(
+                    100% - 20px,
+                    950px
+                );
+
+                padding-top: 30px;
+            }
+
+            .site-details {
+                padding-left: 18px;
+            }
+
+            .site-summary {
+                padding: 15px;
+            }
+
+            .site-status {
+                display: none;
+            }
         }
     </style>
 </head>
 
 <body>
-    <main>
-        <h1>Netitera Index</h1>
 
-        <p class="description">
-            Approved sites in the Netitera index.
-        </p>
+<header>
+    <a
+        class="brand"
+        href="./"
+    >
+        Netitera
+    </a>
+</header>
 
-        <div id="status">
-            Loading index...
-        </div>
+<main>
 
-        <ul id="sites"></ul>
-    </main>
+    <h1>Netitera Index</h1>
 
-    <script src="./index.js"></script>
+    <p class="subtitle">
+        Approved sites and their latest crawl data.
+    </p>
+
+    <div
+        class="status"
+        id="status"
+    >
+        Loading index...
+    </div>
+
+    <section id="sites"></section>
+
+</main>
+
+<footer>
+    Netitera Index
+</footer>
+
+
+<script src="./index.js"></script>
+
+<script>
+(function () {
+
+    "use strict";
+
+
+    const sitesContainer =
+        document.getElementById("sites");
+
+    const status =
+        document.getElementById("status");
+
+
+    function formatDate(value) {
+
+        if (!value) {
+            return "Unknown";
+        }
+
+        const date =
+            new Date(value);
+
+        if (Number.isNaN(
+            date.getTime()
+        )) {
+            return value;
+        }
+
+        return date.toLocaleString();
+    }
+
+
+    function createSiteElement(
+        domain,
+        crawl
+    ) {
+
+        const site =
+            document.createElement("article");
+
+        site.className =
+            "site";
+
+
+        const summary =
+            document.createElement("button");
+
+        summary.className =
+            "site-summary";
+
+        summary.type =
+            "button";
+
+
+        const arrow =
+            document.createElement("span");
+
+        arrow.className =
+            "arrow";
+
+        arrow.textContent =
+            "›";
+
+
+        const domainElement =
+            document.createElement("span");
+
+        domainElement.className =
+            "domain";
+
+        domainElement.textContent =
+            domain;
+
+
+        const siteStatus =
+            document.createElement("span");
+
+        siteStatus.className =
+            "site-status";
+
+
+        const details =
+            document.createElement("div");
+
+        details.className =
+            "site-details";
+
+
+        summary.appendChild(
+            arrow
+        );
+
+        summary.appendChild(
+            domainElement
+        );
+
+        summary.appendChild(
+            siteStatus
+        );
+
+
+        site.appendChild(
+            summary
+        );
+
+        site.appendChild(
+            details
+        );
+
+
+        summary.addEventListener(
+            "click",
+            function () {
+
+                site.classList.toggle(
+                    "open"
+                );
+
+            }
+        );
+
+
+        if (!crawl) {
+
+            siteStatus.textContent =
+                "Not crawled";
+
+            siteStatus.classList.add(
+                "warning"
+            );
+
+
+            details.innerHTML =
+                '<div class="empty">' +
+                "No crawl data exists yet." +
+                "</div>";
+
+            return site;
+        }
+
+
+        const statistics =
+            crawl.statistics || {};
+
+
+        const pages =
+            Array.isArray(
+                crawl.pages
+            )
+                ? crawl.pages
+                : [];
+
+
+        siteStatus.textContent =
+            pages.length +
+            " page" +
+            (
+                pages.length === 1
+                    ? ""
+                    : "s"
+            );
+
+        siteStatus.classList.add(
+            "success"
+        );
+
+
+        const stats =
+            document.createElement("div");
+
+        stats.className =
+            "stats";
+
+
+        const statPages =
+            document.createElement("div");
+
+        statPages.className =
+            "stat";
+
+        statPages.textContent =
+            "Pages: " +
+            (statistics.pages ?? pages.length);
+
+
+        const statErrors =
+            document.createElement("div");
+
+        statErrors.className =
+            "stat";
+
+        statErrors.textContent =
+            "Errors: " +
+            (statistics.errors ?? 0);
+
+
+        const statDate =
+            document.createElement("div");
+
+        statDate.className =
+            "stat";
+
+        statDate.textContent =
+            "Crawled: " +
+            formatDate(
+                crawl.crawled_at
+            );
+
+
+        const statDepth =
+            document.createElement("div");
+
+        statDepth.className =
+            "stat";
+
+        statDepth.textContent =
+            "Max depth: " +
+            (
+                crawl.crawler &&
+                crawl.crawler.max_depth !== undefined
+                    ? crawl.crawler.max_depth
+                    : "?"
+            );
+
+
+        stats.appendChild(
+            statPages
+        );
+
+        stats.appendChild(
+            statErrors
+        );
+
+        stats.appendChild(
+            statDate
+        );
+
+        stats.appendChild(
+            statDepth
+        );
+
+
+        details.appendChild(
+            stats
+        );
+
+
+        const pagesContainer =
+            document.createElement("div");
+
+        pagesContainer.className =
+            "pages";
+
+
+        if (!pages.length) {
+
+            const empty =
+                document.createElement("div");
+
+            empty.className =
+                "empty";
+
+            empty.textContent =
+                "The crawler found no pages.";
+
+            pagesContainer.appendChild(
+                empty
+            );
+
+        } else {
+
+            for (const page of pages) {
+
+                const pageElement =
+                    document.createElement("div");
+
+                pageElement.className =
+                    "page";
+
+
+                const link =
+                    document.createElement("a");
+
+                link.className =
+                    "page-title";
+
+                link.href =
+                    page.url;
+
+                link.target =
+                    "_blank";
+
+                link.rel =
+                    "noopener noreferrer";
+
+                link.textContent =
+                    page.title ||
+                    page.url;
+
+
+                const url =
+                    document.createElement("div");
+
+                url.className =
+                    "page-url";
+
+                url.textContent =
+                    page.url;
+
+
+                pageElement.appendChild(
+                    link
+                );
+
+                pageElement.appendChild(
+                    url
+                );
+
+
+                if (page.description) {
+
+                    const description =
+                        document.createElement("div");
+
+                    description.className =
+                        "page-description";
+
+                    description.textContent =
+                        page.description;
+
+                    pageElement.appendChild(
+                        description
+                    );
+                }
+
+
+                pagesContainer.appendChild(
+                    pageElement
+                );
+
+            }
+
+        }
+
+
+        details.appendChild(
+            pagesContainer
+        );
+
+
+        return site;
+    }
+
+
+    async function load() {
+
+        try {
+
+            if (
+                !window.NetiteraIndex ||
+                typeof window.NetiteraIndex.getAllCrawls !==
+                    "function"
+            ) {
+                throw new Error(
+                    "Netitera Index API is unavailable."
+                );
+            }
+
+
+            const data =
+                await window.NetiteraIndex
+                    .getAllCrawls();
+
+
+            sitesContainer.replaceChildren();
+
+
+            let crawledCount = 0;
+
+
+            for (const item of data) {
+
+                if (item.crawl) {
+                    crawledCount++;
+                }
+
+
+                const element =
+                    createSiteElement(
+                        item.domain,
+                        item.crawl
+                    );
+
+
+                sitesContainer.appendChild(
+                    element
+                );
+
+            }
+
+
+            status.textContent =
+                data.length +
+                " approved site" +
+                (
+                    data.length === 1
+                        ? ""
+                        : "s"
+                ) +
+                " · " +
+                crawledCount +
+                " crawled";
+
+
+        } catch (error) {
+
+            console.error(
+                error
+            );
+
+
+            status.className =
+                "status error";
+
+            status.textContent =
+                "Unable to load the Index: " +
+                error.message;
+
+        }
+
+    }
+
+
+    load();
+
+})();
+</script>
+
 </body>
 </html>
